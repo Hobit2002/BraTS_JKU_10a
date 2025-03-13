@@ -1,8 +1,12 @@
+## Wandb
+wandb
 
 ## Dataset
+**.gz
 
 #BraTS2023-GLI-Challenge-TrainingData
 ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData
+data_subset
 
 #Dataset Generation files
 dataset/binarySegmentationMasks.gz

@@ -1,6 +1,7 @@
 # @author Robert Graf; deep-spine.de 2023
 from pathlib import Path
 import numpy
+import wandb
 
 import torch
 import torchvision
@@ -15,7 +16,7 @@ from baseline_utils import LambdaLR, denormalize
 import argparse  # for nice command line argument parsing
 
 import pytorch_lightning as pl
-
+from pytorch_lightning.loggers import WandbLogger
 
 class Pix2Pix3D(pl.LightningModule):
     def __init__(
@@ -31,7 +32,7 @@ class Pix2Pix3D(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.in_channels = in_channels
-        self.logger: TensorBoardLogger
+        self.logger: WandbLogger
         ### Model ###
         self.model = UNet(input_nc=in_channels, output_nc=out_channels, net_G_channel=32, net_G_depth=6, net_G_drop_out=0)
         self.discriminator = Discriminator(in_channels + out_channels, depth=3, channels=64)
@@ -176,7 +177,7 @@ class Pix2Pix3D(pl.LightningModule):
         grid = torch.cat(out, dim=-1).cpu()
         grid = torchvision.utils.make_grid(grid, nrow=10)
 
-        self.logger.experiment.add_image("A2B", grid, self.counter)
+        self.logger.experiment.log({"A2B": wandb.Image(grid)}, step=self.counter)
 
         self.counter += 1
         # TODO You may compute a validation loss for early stopping or selecting best model. This must be done on real validation data!
@@ -208,7 +209,7 @@ if __name__ == "__main__":
         dest="gpus",
         type=int,
         nargs="+",
-        default=[0],
+        default=1,
         help="comma separated list of cuda device (e.g. GPUs) to be used",
     )
     # Seed
@@ -230,8 +231,8 @@ if __name__ == "__main__":
     accelerator = args.accelerator
     gpus = args.gpus  # Or list of GPU-Ids; 0 is CPU
     print(f"Running on {accelerator}:")
-    for gpu in gpus:
-        print(f"\t[{gpu}]: {torch.cuda.get_device_name(gpu)}")
+    """for gpu in gpus:
+        print(f"\t[{gpu}]: {torch.cuda.get_device_name(gpu)}")"""
     seed = args.seed
     train_p, val_p = args.split
     crop_shape = args.crop_shape
@@ -255,8 +256,8 @@ if __name__ == "__main__":
     # for the original version of the notebook/code, you are probably using torch version below 1.13 which is not supporting fractions
     # see https://github.com/BraTS-inpainting/2023_challenge/issues/1 
 
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=16)
-    validation_loader = DataLoader(validation_set, batch_size=batch_size, shuffle=False, num_workers=16)
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=8)
+    validation_loader = DataLoader(validation_set, batch_size=batch_size, shuffle=False, num_workers=8)
     # TODO: tune prefetch_factor and pin_memory
 
     ### Model and Training ###
@@ -274,7 +275,7 @@ if __name__ == "__main__":
     )
 
     # Create TensorBoardLogger
-    logger = TensorBoardLogger("lightning_logs", name=name, default_hp_metric=False)
+    logger = WandbLogger(project="MRI_inpaint", name=name)
     print("######################################")
     print("experiment_name:", name)
     print("######################################")
@@ -291,7 +292,7 @@ if __name__ == "__main__":
         callbacks=[checkpoint_callback],  # You may add here additional call back that saves the best model
         # limit_train_batches=150
         # detect_anomaly=True,
-        strategy=("ddp_find_unused_parameters_true" if len(gpus) > 1 else "auto"),  # for distributed compatibility
+        #strategy=("ddp_find_unused_parameters_true" if len(gpus) > 1 else "auto"),  # for distributed compatibility
     )
 
     # Fit/train model
